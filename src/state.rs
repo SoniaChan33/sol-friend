@@ -37,3 +37,23 @@ impl UserProfile {
         self.data_len = self.followers.len() as u16;
     }
 }
+
+impl UserPost {
+    pub fn new() -> Self {
+        UserPost { post_count: 0 }
+    }
+
+    pub fn add_post(&mut self) {
+        self.post_count += 1;
+    }
+
+    pub fn get_count(&self) -> u16 {
+        self.post_count
+    }
+}
+
+impl Post {
+    pub fn new(content: String, timestamp: u64) -> Self {
+        Post { content, timestamp }
+    }
+}

@@ -5,8 +5,10 @@ use crate::state::*;
 use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
 use solana_program::account_info::{next_account_info, AccountInfo};
+use solana_program::address_lookup_table::program;
 use solana_program::borsh1::try_from_slice_unchecked;
 use solana_program::entrypoint::ProgramResult;
+use solana_program::example_mocks::solana_sdk::sysvar::rent;
 use solana_program::program::{invoke, invoke_signed};
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
@@ -20,6 +22,8 @@ const PUBKEY_SIZE: usize = 32;
 const U16_SIZE: usize = 2;
 const USER_PROFILE_SIZE: usize = 6;
 const MAX_FOLLOWERS_SIZE: usize = 256;
+
+const USER_POST_SIZE: usize = 8;
 
 impl Processor {
     pub fn process_instruction(
@@ -45,6 +49,7 @@ impl Processor {
             }
             SocialInstruction::PostContent { content } => {
                 // 处理发布内容的逻辑
+                Self::post_content(accounts, content);
                 Ok(())
             }
             SocialInstruction::QueryPosts => {
@@ -89,7 +94,7 @@ impl Processor {
         // 计算空间
         let space = match seed_type.as_str() {
             "profile" => counter_profile_space(MAX_FOLLOWERS_SIZE),
-            "post" => 0,
+            "post" => USER_POST_SIZE,
             _ => return Err(ProgramError::InvalidArgument),
         };
 
@@ -125,6 +130,9 @@ impl Processor {
             }
             "post" => {
                 // 处理帖子账户的逻辑
+                let user_post = UserPost::new();
+                user_post.serialize(&mut *pda_account.try_borrow_mut_data()?)?;
+                msg!("User post initialized: {:?}", user_post);
             }
             _ => return Err(ProgramError::InvalidArgument),
         }
@@ -197,6 +205,79 @@ impl Processor {
         let mut user_profile = try_from_slice_unchecked::<UserProfile>(&pda_account.data.borrow())?;
         user_profile.unfollow(user_to_unfollow);
         user_profile.serialize(&mut &mut pda_account.data.borrow_mut()[..])?;
+        Ok(())
+    }
+
+    fn post_content(
+        program_id: &Pubkey,
+        accounts: &[AccountInfo],
+        content: String,
+    ) -> ProgramResult {
+        // 获取用户账户和PDA账户
+        let account_info_iter = &mut accounts.iter();
+        let user_account = next_account_info(account_info_iter)?;
+        let pda_account = next_account_info(account_info_iter)?;
+        let pda_post_account = next_account_info(account_info_iter)?;
+        let system_program = next_account_info(account_info_iter)?;
+
+        // 获取时间
+        let clock = solana_program::clock::Clock::get()?;
+        let timestamp = clock.unix_timestamp as u64;
+
+        let mut user_post: UserPost = UserPost::try_from_slice(&pda_account.data.borrow())
+            .unwrap_or(UserPost { post_count: 0 });
+
+        // id增长
+        user_post.add_post();
+
+        user_post.serialize(&mut *pda_account.try_borrow_mut_data()?)?;
+
+        // 获取最新的id
+        let count = user_post.get_count();
+        // 计算PDA地址
+        // TODO 为什么这么算
+        let (pda, bump_seed) = Pubkey::find_program_address(
+            &[user_account.key.as_ref(), "post".as_bytes(), &[count as u8]],
+            &spl_token::id(),
+        );
+        // 创建帖子数据
+        let post = Post::new(content, timestamp);
+
+        // 租金计算
+        let rent = Rent::get()?;
+        // TODO unwrap 和？ 的区别
+        let space = borsh::to_vec(&post).unwrap().len();
+
+        let rent_exempt = rent.minimum_balance(space);
+        // 创建账户指令
+        // TODO 为什么需要这些参数
+        let create_account_ix = system_instruction::create_account(
+            user_account.key,
+            &pda,
+            rent_exempt,
+            space as u64,
+            program_id,
+        );
+
+        // TODO 不是很理解这里面的参数，特别是signer_seeds 为什么会有这些参数，是为了生成唯一的PDA地址吗？
+        invoke_signed(
+            &create_account_ix,
+            &[
+                user_account.clone(),
+                pda_post_account.clone(),
+                system_program.clone(),
+            ],
+            &[&[
+                user_account.key.as_ref(),
+                "post".as_bytes(),
+                &[count as u8],
+                &[bump_seed],
+            ]],
+        )?;
+
+        // 写入账户
+        post.serialize(&mut *pda_post_account.try_borrow_mut_data()?)?;
+
         Ok(())
     }
 }
