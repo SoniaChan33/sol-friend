@@ -9,6 +9,5 @@ spl-associated-token-account = { version = "7.0.0", features = [
     "no-entrypoint",
 ] }
 spl-token = { version = "8.0.0", features = ["no-entrypoint"] }
-
 [lib]
 crate-type = ["cdylib", "lib"]

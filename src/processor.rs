@@ -2,13 +2,14 @@ use std::char::MAX;
 
 use crate::instruction::*;
 use crate::state::*;
-
 use borsh::BorshDeserialize;
+use borsh::BorshSerialize;
 use solana_program::account_info::{next_account_info, AccountInfo};
+use solana_program::borsh1::try_from_slice_unchecked;
 use solana_program::entrypoint::ProgramResult;
-use solana_program::example_mocks::solana_sdk::system_instruction;
 use solana_program::program::{invoke, invoke_signed};
 use solana_program::pubkey::Pubkey;
+use solana_program::system_instruction;
 use solana_program::sysvar::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{lamports, msg, pubkey};
@@ -38,14 +39,8 @@ impl Processor {
                 // 处理关注用户的逻辑
                 Self::follow_user(accounts, user_to_follow)
             }
-            SocialInstruction::UnfollowUser { user_to_unfollow } => {
-                // 处理取消关注用户的逻辑
-                Ok(())
-            }
-            SocialInstruction::QueryFollowers => {
-                // 处理查询关注者的逻辑
-                Ok(())
-            }
+            SocialInstruction::QueryFollowers => Self::query_followers(accounts),
+            SocialInstruction::UnfollowUser { user_to_unfollow } => Ok(()),
             SocialInstruction::PostContent { content } => {
                 // 处理发布内容的逻辑
                 Ok(())
@@ -70,6 +65,7 @@ impl Processor {
         let pda_account = next_account_info(account_info_iter)?;
         let system_program = next_account_info(account_info_iter)?;
 
+        // 确认pda的种类
         let seed = match seed_type.as_str() {
             "profile" => "profile",
             "post" => "post",
@@ -96,7 +92,7 @@ impl Processor {
         };
 
         // 计算租金
-        let lamports = rent.minimum_balance(space);
+        let lamports: u64 = rent.minimum_balance(space);
 
         // 创建账户指令
         let create_account_ix = system_instruction::create_account(
@@ -138,8 +134,7 @@ impl Processor {
     fn follow_user(accounts: &[AccountInfo], user_to_follow: Pubkey) -> ProgramResult {
         // 获取用户账户和PDA账户
         let account_info_iter = &mut accounts.iter();
-        let user_account = next_account_info(account_info_iter)?;
-        let pda_account = next_account_info(account_info_iter)?;
+        let pda_account: &AccountInfo<'_> = next_account_info(account_info_iter)?;
 
         // 从PDA中获取用户个人资料
         let mut size: usize = 0;
@@ -148,7 +143,7 @@ impl Processor {
             let data = &pda_account.data.borrow();
 
             // TODO 为什么是数组切片
-            let len = &data[..U16_SIZE];
+            let len: &[u8] = &data[..U16_SIZE];
             let pubkey_count = bytes_to_u16(len).unwrap() as usize;
             size = counter_profile_space(pubkey_count);
             msg!("size is {:?}", size);
@@ -161,6 +156,35 @@ impl Processor {
         user_profile.follow(user_to_follow);
         // TODO 这里为什么需要再序列化
         user_profile.serialize(&mut *pda_account.try_borrow_mut_data()?)?;
+        Ok(())
+    }
+
+    fn query_followers(accounts: &[AccountInfo]) -> ProgramResult {
+        // 获取用户账户和PDA账户
+        let account_info_iter = &mut accounts.iter();
+        let pda_account = next_account_info(account_info_iter)?;
+
+        // 这样比较麻烦
+        // // 从PDA中获取用户个人资料
+        // let mut size: usize = 0;
+        // {
+        //     let data = &pda_account.data.borrow();
+        //     let len = &data[..U16_SIZE];
+        //     let pubkey_count = bytes_to_u16(len).unwrap() as usize;
+        //     size = counter_profile_space(pubkey_count);
+        //     msg!("size is {:?}", size);
+        // }
+
+        // // 反序列化用户个人资料
+        // let user_profile: UserProfile =
+        //     UserProfile::try_from_slice(&pda_account.data.borrow()[..size])?;
+        // msg!("user_profile is {:?}", user_profile);
+
+        let user_profile =
+            try_from_slice_unchecked::<UserProfile>(&pda_account.data.borrow()).unwrap();
+
+        msg!("user_profile is {:?}", user_profile);
+        // TODO 返回关注者列表
         Ok(())
     }
 }
