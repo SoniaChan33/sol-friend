@@ -30,4 +30,10 @@ impl UserProfile {
             self.data_len += 1;
         }
     }
+
+    pub fn unfollow(&mut self, user_to_follow: Pubkey) {
+        // If the user is being followed, remove them from the followers list
+        self.followers.retain(|&x| x != user_to_follow);
+        self.data_len = self.followers.len() as u16;
+    }
 }

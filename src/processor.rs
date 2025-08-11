@@ -40,7 +40,9 @@ impl Processor {
                 Self::follow_user(accounts, user_to_follow)
             }
             SocialInstruction::QueryFollowers => Self::query_followers(accounts),
-            SocialInstruction::UnfollowUser { user_to_unfollow } => Ok(()),
+            SocialInstruction::UnfollowUser { user_to_unfollow } => {
+                Self::unfollow_user(accounts, user_to_unfollow)
+            }
             SocialInstruction::PostContent { content } => {
                 // 处理发布内容的逻辑
                 Ok(())
@@ -185,6 +187,16 @@ impl Processor {
 
         msg!("user_profile is {:?}", user_profile);
         // TODO 返回关注者列表
+        Ok(())
+    }
+
+    fn unfollow_user(accounts: &[AccountInfo], user_to_unfollow: Pubkey) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let pda_account = next_account_info(account_info_iter)?;
+
+        let mut user_profile = try_from_slice_unchecked::<UserProfile>(&pda_account.data.borrow())?;
+        user_profile.unfollow(user_to_unfollow);
+        user_profile.serialize(&mut &mut pda_account.data.borrow_mut()[..])?;
         Ok(())
     }
 }
