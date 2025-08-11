@@ -4,6 +4,7 @@ use crate::instruction::*;
 use crate::state::*;
 use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
+use solana_program::account_info;
 use solana_program::account_info::{next_account_info, AccountInfo};
 use solana_program::address_lookup_table::program;
 use solana_program::borsh1::try_from_slice_unchecked;
@@ -15,6 +16,7 @@ use solana_program::system_instruction;
 use solana_program::sysvar::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{lamports, msg, pubkey};
+use spl_associated_token_account::tools::account;
 use spl_token::solana_program::program_error::ProgramError;
 pub struct Processor;
 
@@ -49,12 +51,11 @@ impl Processor {
             }
             SocialInstruction::PostContent { content } => {
                 // 处理发布内容的逻辑
-                Self::post_content(accounts, content);
-                Ok(())
+                Self::post_content(program_id, accounts, content)
             }
             SocialInstruction::QueryPosts => {
                 // 处理查询用户帖子
-                Ok(())
+                Self::query_post(accounts)
             }
         }
     }
@@ -277,6 +278,22 @@ impl Processor {
 
         // 写入账户
         post.serialize(&mut *pda_post_account.try_borrow_mut_data()?)?;
+
+        Ok(())
+    }
+
+    fn query_post(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let pda_account = next_account_info(account_info_iter)?;
+        let pda_post_account = next_account_info(account_info_iter)?;
+
+        // 获取用户帖子信息
+        let user_post = try_from_slice_unchecked::<UserPost>(&pda_account.data.borrow())?;
+        msg!("user_post is {:?}", user_post);
+        // 获取帖子信息
+        let post = try_from_slice_unchecked::<Post>(&pda_post_account.data.borrow())?;
+
+        msg!("post is {:?}", post);
 
         Ok(())
     }
