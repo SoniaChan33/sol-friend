@@ -4,19 +4,15 @@ use crate::instruction::*;
 use crate::state::*;
 use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
-use solana_program::account_info;
 use solana_program::account_info::{next_account_info, AccountInfo};
-use solana_program::address_lookup_table::program;
 use solana_program::borsh1::try_from_slice_unchecked;
 use solana_program::entrypoint::ProgramResult;
-use solana_program::example_mocks::solana_sdk::sysvar::rent;
 use solana_program::program::{invoke, invoke_signed};
 use solana_program::pubkey::Pubkey;
 use solana_program::system_instruction;
 use solana_program::sysvar::rent::Rent;
 use solana_program::sysvar::Sysvar;
 use solana_program::{lamports, msg, pubkey};
-use spl_associated_token_account::tools::account;
 use spl_token::solana_program::program_error::ProgramError;
 pub struct Processor;
 
@@ -239,7 +235,7 @@ impl Processor {
         // TODO 为什么这么算
         let (pda, bump_seed) = Pubkey::find_program_address(
             &[user_account.key.as_ref(), "post".as_bytes(), &[count as u8]],
-            &spl_token::id(),
+            program_id,
         );
         // 创建帖子数据
         let post = Post::new(content, timestamp);
